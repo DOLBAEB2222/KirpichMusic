@@ -100,13 +100,13 @@ class TrackCard extends Component {
     render() {
         const { track } = this.props;
         const div = document.createElement('div');
-        div.className = 'card';
+        div.className = 'card hover-lift';
         
         const isLiked = AppActions.isLiked(track.id);
         
         div.innerHTML = `
-            <div class="card-cover" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 3rem;">
-                🎵
+            <div class="card-cover" style="${track.cover ? `background-image: url(${track.cover}); background-size: cover;` : 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);'} display: flex; align-items: center; justify-content: center; color: white; font-size: 3rem;">
+                ${track.cover ? '' : '🎵'}
             </div>
             <div class="card-body">
                 <div class="card-title truncate">${Utils.escapeHtml(track.title)}</div>
@@ -126,7 +126,7 @@ class ArtistCard extends Component {
     render() {
         const { artist } = this.props;
         const div = document.createElement('div');
-        div.className = 'card';
+        div.className = 'card hover-lift';
         
         const initials = Utils.getInitials(artist.displayName);
         const isFollowing = AppActions.isFollowing(artist.id);
@@ -156,7 +156,7 @@ class PlaylistCard extends Component {
     render() {
         const { playlist } = this.props;
         const div = document.createElement('div');
-        div.className = 'card';
+        div.className = 'card hover-lift';
         
         div.innerHTML = `
             <div class="card-cover" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 3rem;">
@@ -180,6 +180,7 @@ class Sidebar extends Component {
     render() {
         const div = document.createElement('div');
         div.className = 'sidebar';
+        this.el = div; // Assign to this.el here so onMount can use it
         
         const navItems = [
             { icon: 'home', label: 'Главная', path: '/' },
@@ -189,6 +190,10 @@ class Sidebar extends Component {
             { icon: 'message-circle', label: 'IRC Чат', path: '/chat' },
             { icon: 'radio', label: 'Радио', path: '/radio' }
         ];
+        
+        if (Auth.isAdmin()) {
+            navItems.push({ icon: 'settings', label: 'Админка', path: '/admin' });
+        }
         
         const playlistItems = [
             ...MockData.playlists.slice(0, 5),
@@ -222,9 +227,10 @@ class Sidebar extends Component {
                         ${new Icon({ name: 'plus', size: 20 }).render().outerHTML}
                         <span>Создать плейлист</span>
                     </button>
-                </div>
-            </div>
-        `;
+                    </div>
+                    <div class="sidebar-resizer"></div>
+                    </div>
+                    `;
         
         div.addEventListener('click', (e) => {
             const target = e.target.closest('[data-action]');
@@ -253,6 +259,11 @@ class Sidebar extends Component {
 
 class PlayerBar extends Component {
     onMount() {
+        const playerPanel = this.el;
+        if (playerPanel && playerPanel.id === 'player-bar-panel') {
+            Panels.initDraggable(playerPanel, '.player-drag-handle', 'player-bar');
+        }
+
         this.unsubscribers.push(
             store.subscribe('currentTrack', () => this.update()),
             store.subscribe('isPlaying', () => this.update()),
@@ -271,66 +282,70 @@ class PlayerBar extends Component {
         }
         
         const div = document.createElement('div');
-        div.className = 'player-bar';
+        div.className = 'player-bar draggable-panel';
+        div.id = 'player-bar-panel';
         
         const isLiked = AppActions.isLiked(currentTrack.id);
         
         div.innerHTML = `
-            <div class="player-track-info">
-                <div class="player-cover" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 2rem;">
-                    🎵
-                </div>
-                <div class="player-details">
-                    <div class="player-title truncate">${Utils.escapeHtml(currentTrack.title)}</div>
-                    <div class="player-artist truncate">${Utils.escapeHtml(currentTrack.artist)}</div>
-                </div>
-                <button class="btn btn-icon btn-ghost player-like">
-                    ${new Icon({ name: isLiked ? 'heart-filled' : 'heart', size: 20 }).render().outerHTML}
-                </button>
-            </div>
-            
-            <div class="player-controls">
-                <div class="player-buttons">
-                    <button class="btn btn-icon btn-ghost player-btn" data-action="shuffle">
-                        ${new Icon({ name: 'shuffle', size: 20 }).render().outerHTML}
-                    </button>
-                    <button class="btn btn-icon btn-ghost player-btn" data-action="previous">
-                        ${new Icon({ name: 'skip-back', size: 20 }).render().outerHTML}
-                    </button>
-                    <button class="btn btn-icon player-btn player-btn-play" data-action="play">
-                        ${new Icon({ name: isPlaying ? 'pause' : 'play', size: 24 }).render().outerHTML}
-                    </button>
-                    <button class="btn btn-icon btn-ghost player-btn" data-action="next">
-                        ${new Icon({ name: 'skip-forward', size: 20 }).render().outerHTML}
-                    </button>
-                    <button class="btn btn-icon btn-ghost player-btn" data-action="repeat">
-                        ${new Icon({ name: 'repeat', size: 20 }).render().outerHTML}
-                    </button>
-                </div>
-                <div class="player-timeline">
-                    <span class="player-time">0:00</span>
-                    <div class="progress">
-                        <div class="progress-bar" style="width: 0%"></div>
+            <div class="player-drag-handle panel-handle">::::::::::::</div>
+            <div class="player-bar-content">
+                <div class="player-track-info">
+                    <div class="player-cover" style="${currentTrack.cover ? `background-image: url(${currentTrack.cover}); background-size: cover;` : 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);'} display: flex; align-items: center; justify-content: center; color: white; font-size: 2rem;">
+                        ${currentTrack.cover ? '' : '🎵'}
                     </div>
-                    <span class="player-time">${Utils.formatTime(currentTrack.duration)}</span>
-                </div>
-            </div>
-            
-            <div class="player-extras">
-                <button class="btn btn-icon btn-ghost" data-action="expand">
-                    ${new Icon({ name: 'maximize', size: 20 }).render().outerHTML}
-                </button>
-                <div class="player-volume">
-                    <button class="btn btn-icon btn-ghost" data-action="mute">
-                        ${new Icon({ name: isMuted ? 'volume-x' : 'volume-2', size: 20 }).render().outerHTML}
+                    <div class="player-details">
+                        <div class="player-title truncate">${Utils.escapeHtml(currentTrack.title)}</div>
+                        <div class="player-artist truncate">${Utils.escapeHtml(currentTrack.artist)}</div>
+                    </div>
+                    <button class="btn btn-icon btn-ghost player-like">
+                        ${new Icon({ name: isLiked ? 'heart-filled' : 'heart', size: 20 }).render().outerHTML}
                     </button>
-                    <div class="progress">
-                        <div class="progress-bar" style="width: ${isMuted ? 0 : volume * 100}%"></div>
+                </div>
+                
+                <div class="player-controls">
+                    <div class="player-buttons">
+                        <button class="btn btn-icon btn-ghost player-btn" data-action="shuffle">
+                            ${new Icon({ name: 'shuffle', size: 20 }).render().outerHTML}
+                        </button>
+                        <button class="btn btn-icon btn-ghost player-btn" data-action="previous">
+                            ${new Icon({ name: 'skip-back', size: 20 }).render().outerHTML}
+                        </button>
+                        <button class="btn btn-icon player-btn player-btn-play" data-action="play">
+                            ${new Icon({ name: isPlaying ? 'pause' : 'play', size: 24 }).render().outerHTML}
+                        </button>
+                        <button class="btn btn-icon btn-ghost player-btn" data-action="next">
+                            ${new Icon({ name: 'skip-forward', size: 20 }).render().outerHTML}
+                        </button>
+                        <button class="btn btn-icon btn-ghost player-btn" data-action="repeat">
+                            ${new Icon({ name: 'repeat', size: 20 }).render().outerHTML}
+                        </button>
+                    </div>
+                    <div class="player-timeline">
+                        <span class="player-time">0:00</span>
+                        <div class="progress">
+                            <div class="progress-bar" style="width: 0%"></div>
+                        </div>
+                        <span class="player-time">${Utils.formatTime(currentTrack.duration)}</span>
                     </div>
                 </div>
-                <button class="btn btn-icon btn-ghost" data-action="queue">
-                    ${new Icon({ name: 'list', size: 20 }).render().outerHTML}
-                </button>
+                
+                <div class="player-extras">
+                    <button class="btn btn-icon btn-ghost" data-action="expand">
+                        ${new Icon({ name: 'maximize', size: 20 }).render().outerHTML}
+                    </button>
+                    <div class="player-volume">
+                        <button class="btn btn-icon btn-ghost" data-action="mute">
+                            ${new Icon({ name: isMuted ? 'volume-x' : 'volume-2', size: 20 }).render().outerHTML}
+                        </button>
+                        <div class="progress">
+                            <div class="progress-bar" style="width: ${isMuted ? 0 : volume * 100}%"></div>
+                        </div>
+                    </div>
+                    <button class="btn btn-icon btn-ghost" data-action="queue">
+                        ${new Icon({ name: 'list', size: 20 }).render().outerHTML}
+                    </button>
+                </div>
             </div>
         `;
         

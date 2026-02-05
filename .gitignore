@@ -25,7 +25,16 @@ dist/
 build/
 .cache/
 
-# Environment
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
 .env
-.env.local
-.env.production
+.venv
+env/
+bin/
+lib/
+include/
+setuptools/
+pip-selfcheck.json

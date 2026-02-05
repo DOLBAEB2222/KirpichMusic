@@ -14,6 +14,17 @@ class Router {
     handleRoute() {
         const { path, params } = Utils.parseHashUrl();
         
+        // Route protection
+        if (path === '/admin' && !Auth.isAdmin()) {
+            Utils.setHashUrl('/');
+            return;
+        }
+
+        if (path !== '/' && path !== '/onboarding' && !store.state.isAuthenticated) {
+            Utils.setHashUrl('/');
+            return;
+        }
+
         for (const [routePath, handler] of this.routes) {
             const match = this.matchRoute(routePath, path);
             if (match) {
@@ -53,11 +64,17 @@ class Router {
         const app = document.getElementById('app');
         app.innerHTML = '';
         
+        const pageContainer = document.createElement('div');
+        pageContainer.className = 'page-transition';
+        app.appendChild(pageContainer);
+
         this.currentPage = handler(params);
         
         if (this.currentPage && this.currentPage.mount) {
-            this.currentPage.mount(app);
+            this.currentPage.mount(pageContainer);
         }
+        
+        Utils.initGlobalPanels();
     }
 }
 
@@ -168,18 +185,32 @@ class AuthPage extends Components.Component {
         });
     }
     
-    handleSubmit() {
+    async handleSubmit() {
+        const form = this.el.querySelector('#auth-form');
+        const formData = new FormData(form);
+        const username = formData.get('username');
+        const password = formData.get('password');
+
         if (this.mode === 'guest') {
             AppActions.loginAsGuest();
             Utils.setHashUrl('/onboarding');
-        } else if (this.mode === 'login' || this.mode === 'register') {
+        } else if (this.mode === 'login') {
+            try {
+                const user = await Auth.login(username, password);
+                AppActions.login(user);
+                Utils.setHashUrl('/onboarding');
+            } catch (err) {
+                alert('Ошибка входа: ' + err.message);
+            }
+        } else if (this.mode === 'register') {
             const user = {
                 id: Utils.randomInt(100, 999),
-                username: 'new_user',
-                displayName: 'Новый пользователь',
+                username: username || 'new_user',
+                displayName: username || 'Новый пользователь',
                 avatar: null,
                 bio: 'Люблю музыку',
                 verified: false,
+                role: 'user',
                 type: 'listener',
                 followers: 0,
                 following: 0,
@@ -624,33 +655,37 @@ class ChatPage extends Components.Component {
             <div class="app-main">
                 ${new Components.Sidebar().render().outerHTML}
                 <div class="content">
-                    <div class="chat-container">
-                        <div class="chat-channels">
-                            <h3 style="margin-bottom: var(--space-lg); font-size: var(--font-size-sm); text-transform: uppercase; color: var(--color-text-tertiary);">Каналы</h3>
-                            ${channels.map(channel => `
-                                <div class="chat-channel-item ${channel === currentIrcChannel ? 'active' : ''}" data-channel="${channel}">
-                                    <span class="chat-channel-icon">#</span>
-                                    <span>${channel.slice(1)}</span>
-                                    ${unreadMessages[channel] ? `<span class="chat-channel-unread">${unreadMessages[channel]}</span>` : ''}
+                    <div class="chat-container draggable-panel" id="chat-panel">
+                        <div class="panel-handle chat-drag-handle">:::</div>
+                        <div class="chat-layout">
+                            <div class="chat-channels">
+                                <h3 style="margin-bottom: var(--space-lg); font-size: var(--font-size-sm); text-transform: uppercase; color: var(--color-text-tertiary);">Каналы</h3>
+                                ${channels.map(channel => `
+                                    <div class="chat-channel-item ${channel === currentIrcChannel ? 'active' : ''}" data-channel="${channel}">
+                                        <span class="chat-channel-icon">#</span>
+                                        <span>${channel.slice(1)}</span>
+                                        ${unreadMessages[channel] ? `<span class="chat-channel-unread">${unreadMessages[channel]}</span>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="chat-main">
+                                <div class="chat-header">
+                                    <div>
+                                        <h2 style="margin: 0;">${currentIrcChannel}</h2>
+                                        <p style="color: var(--color-text-secondary); font-size: var(--font-size-sm); margin: 0;">
+                                            ${messages.length} сообщений
+                                        </p>
+                                    </div>
                                 </div>
-                            `).join('')}
-                        </div>
-                        <div class="chat-main">
-                            <div class="chat-header">
-                                <div>
-                                    <h2 style="margin: 0;">${currentIrcChannel}</h2>
-                                    <p style="color: var(--color-text-secondary); font-size: var(--font-size-sm); margin: 0;">
-                                        ${messages.length} сообщений
-                                    </p>
+                                <div class="chat-messages" id="chat-messages">
+                                    ${messages.map(msg => this.renderMessage(msg)).join('')}
+                                </div>
+                                <div class="chat-input-wrapper">
+                                    <textarea class="chat-input" placeholder="Написать сообщение..." id="chat-input"></textarea>
                                 </div>
                             </div>
-                            <div class="chat-messages" id="chat-messages">
-                                ${messages.map(msg => this.renderMessage(msg)).join('')}
-                            </div>
-                            <div class="chat-input-wrapper">
-                                <textarea class="chat-input" placeholder="Написать сообщение..." id="chat-input"></textarea>
-                            </div>
                         </div>
+                        <div class="panel-resizer chat-resizer"></div>
                     </div>
                 </div>
             </div>
@@ -714,6 +749,12 @@ class ChatPage extends Components.Component {
     onMount() {
         this.messageInput = this.el.querySelector('#chat-input');
         
+        const chatPanel = this.el.querySelector('#chat-panel');
+        if (chatPanel) {
+            Panels.initDraggable(chatPanel, '.chat-drag-handle', 'chat');
+            Panels.initResizable(chatPanel, '.chat-resizer', 'chat', { minWidth: 400, minHeight: 300 });
+        }
+
         if (this.messageInput) {
             this.messageInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -1268,8 +1309,10 @@ router.addRoute('/liked', () => new LikedPage());
 router.addRoute('/history', () => new HistoryPage());
 router.addRoute('/radio', () => new RadioPage());
 router.addRoute('/player', () => new PlayerPage());
+router.addRoute('/admin', () => new AdminPage());
 
 document.addEventListener('DOMContentLoaded', () => {
+    Auth.checkAuth(); // Check if user is already logged in
     new Components.PlayerBar().mount(document.body);
     new Components.NotificationToast().mount(document.body);
     new SearchModal().mount(document.body);
