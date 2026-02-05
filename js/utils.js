@@ -184,6 +184,13 @@ const Utils = {
         }
     },
 
+    initGlobalPanels() {
+        const sidebars = document.querySelectorAll('.sidebar');
+        sidebars.forEach((sidebar, index) => {
+            Panels.initResizable(sidebar, '.sidebar-resizer', `sidebar-${index}`, { axis: 'x', minWidth: 200, maxWidth: 400 });
+        });
+    },
+
     events: {
         emit(eventName, detail = {}) {
             window.dispatchEvent(new CustomEvent(eventName, { detail }));
